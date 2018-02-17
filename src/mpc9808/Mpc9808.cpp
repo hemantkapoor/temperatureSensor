@@ -40,36 +40,16 @@ Mpc9808::Mpc9808(int i2cNumber)
 		 m_fileNode = -1;
 		 return;
 	 }
+	 //If everything goes as per the plan then create a thread
+	 m_startThread = true;
+	 m_thread = std::thread(&Mpc9808::readTemperaureThread,this);
 }
 
 bool Mpc9808::readTemperature(int& temperature)
 {
-	if(m_fileNode < 0)
-	{
-		std::cout<<"Mpc9808::readTemperature: I2c not open"<<std::endl;
-		return false;
-	}
-	/* Using SMBus commands */
-	//auto res = i2c_smbus_read_word_data(m_fileNode, TEMPERATURE_REGISTER);
-	//First write the address
-	if(write(m_fileNode,(void*)&TEMPERATURE_REGISTER,sizeof(TEMPERATURE_REGISTER)) < 0)
-	{
-		std::cout<<"Mpc9808::readTemperature: Cannot set temperature address\n";
-		return false;
-	}
-
-	//then read 2 bytes
-	unsigned short rawTemperature;
-	auto size = sizeof(rawTemperature);
-	auto returnSize = read(m_fileNode,(void*)&rawTemperature,size);
-	if(static_cast<unsigned int>(returnSize) != size)
-	{
-		std::cout<<"Mpc9808::readTemperature: Cannot Read temperature \n";
-		return false;
-	}
-
-	temperature = convertTemperature(rawTemperature);
-
+	m_temperatureMutex.lock();
+	temperature = m_currentTemperature;
+	m_temperatureMutex.unlock();
 	return true;
 
 
@@ -97,13 +77,60 @@ int Mpc9808::convertTemperature(unsigned short temperatureRaw)
 	return temperature;
 }
 
-Mpc9808::~Mpc9808()
+//Read temperature sensor every one second
+void Mpc9808::readTemperaureThread()
 {
-	std::cout<<"Calling destructor for Mpc9808\n";
+	std::cout<<"Temperature sensor read thread started\n";
+	while(m_startThread)
+	{
+		std::this_thread::sleep_for (std::chrono::seconds(1));
+		if(m_fileNode < 0)
+		{
+			std::cout<<"Mpc9808::readTemperaureThread: I2c not open"<<std::endl;
+			continue;
+		}
+		/* Using SMBus commands */
+		//auto res = i2c_smbus_read_word_data(m_fileNode, TEMPERATURE_REGISTER);
+		//First write the address
+		if(write(m_fileNode,(void*)&TEMPERATURE_REGISTER,sizeof(TEMPERATURE_REGISTER)) < 0)
+		{
+			std::cout<<"Mpc9808::readTemperaureThread: Cannot set temperature address\n";
+			continue;
+		}
+
+		//then read 2 bytes
+		unsigned short rawTemperature;
+		auto size = sizeof(rawTemperature);
+		auto returnSize = read(m_fileNode,(void*)&rawTemperature,size);
+		if(static_cast<unsigned int>(returnSize) != size)
+		{
+			std::cout<<"Mpc9808::readTemperaureThread: Cannot Read temperature \n";
+			continue;
+		}
+
+		auto currentTemperature = convertTemperature(rawTemperature);
+		m_temperatureMutex.lock();
+		m_currentTemperature = currentTemperature;
+		m_temperatureMutex.unlock();
+	}
 	if(m_fileNode > 0)
 	{
 		close(m_fileNode);
 		m_fileNode = -1;
 	}
+}
+
+Mpc9808::~Mpc9808()
+{
+	std::cout<<"Calling destructor for Mpc9808\n";
+	if(m_startThread)
+	{
+		std::cout<<"Waiting for thread to be closed\n";
+		//Stop the thread
+		m_startThread = false;
+		m_thread.join();
+		std::cout<<"Thread closed...\n";
+	}
+
 }
 
