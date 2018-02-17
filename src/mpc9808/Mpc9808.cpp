@@ -32,8 +32,6 @@ Mpc9808::Mpc9808(int i2cNumber)
 		std::cout<<errno<<std::endl;
 		return;
 	}
-	std::cout<<"I2c Opened "<<m_fileNode<<std::endl;
-
 	//If we are here then lets set the slave Address
 	 if (ioctl(m_fileNode, I2C_SLAVE, SLAVE_ADDRESS) < 0)
 	 {
@@ -46,7 +44,6 @@ Mpc9808::Mpc9808(int i2cNumber)
 
 bool Mpc9808::readTemperature(int& temperature)
 {
-	std::cout<<"file node =  "<<m_fileNode<<std::endl;
 	if(m_fileNode < 0)
 	{
 		std::cout<<"Mpc9808::readTemperature: I2c not open"<<std::endl;
@@ -71,11 +68,7 @@ bool Mpc9808::readTemperature(int& temperature)
 		return false;
 	}
 
-	//Lets Just print the value
-	std::cout<<"Raw Temperature = 0x"<<std::hex<<rawTemperature<<std::dec<<std::endl;
-
 	temperature = convertTemperature(rawTemperature);
-	printf("Mpc9808::readTemperature: temperature = %d\n",temperature);
 
 	return true;
 
@@ -93,23 +86,14 @@ int Mpc9808::convertTemperature(unsigned short temperatureRaw)
 		std::cout<<"Got negative value \n";
 		negative = true;
 	}
-	//std::cout<<"Upper Byte = 0x"<<std::hex<<upperByte<<std::endl;
 	//Then mask the flags
 	upperByte &= MASK_FLAG;
-	printf("Upper Byte = %d\n",upperByte);
 	unsigned char lowerByte = (temperatureRaw >> 8) & MASK_BYTE;
-	//std::cout<<"Lower Byte = 0x"<<std::hex<<lowerByte<<std::endl;
-	printf("Lower Byte = %d\n",lowerByte);
-	int numerator = upperByte*16;
-	printf("numerator = %d\n",numerator);
-	int denominator = lowerByte/16;
-	printf("denominator = %d\n",denominator);
-	int temperature = numerator+denominator;
+	int temperature = (upperByte*16)+(lowerByte/16);
 	if(negative)
 	{
 		temperature -=256;
 	}
-	printf("Mpc9808::convertTemperature temperature = %d\n",temperature);
 	return temperature;
 }
 
